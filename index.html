@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#060b18">
+<title>Sistema Oficina</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+:root{
+  --bg:#060b18;
+  --card:rgba(255,255,255,.05);
+  --border:rgba(255,255,255,.09);
+  --text:#e8ecf5;
+  --muted:#8c97b2;
+  --accent:#3b82f6;
+  --vermelho:#ef4444;
+  --amarelo:#facc15;
+  --azul:#3b82f6;
+  --verde:#22c55e;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  min-height:100vh;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(900px 500px at 15% -10%, color-mix(in srgb,var(--accent) 28%,transparent), transparent 60%),
+    radial-gradient(700px 500px at 100% 110%, rgba(99,102,241,.16), transparent 60%),
+    var(--bg);
+  transition:background .6s;
+  padding:max(20px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));
+  display:flex;justify-content:center;
+}
+body.vermelho{--accent:var(--vermelho)}
+body.amarelo{--accent:var(--amarelo)}
+body.azul{--accent:var(--azul)}
+body.verde{--accent:var(--verde)}
+body.idle{--accent:#64748b}
+
+.wrap{width:100%;max-width:460px}
+
+header{display:flex;align-items:center;justify-content:space-between;margin:6px 4px 22px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{
+  width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;
+  background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.03));
+  border:1px solid var(--border);
+}
+h1{font-size:19px;font-weight:700;letter-spacing:.2px}
+.sub{font-size:12px;color:var(--muted);margin-top:2px}
+.conn{
+  display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);
+  padding:6px 11px;border-radius:999px;background:var(--card);border:1px solid var(--border);
+}
+.conn i{width:8px;height:8px;border-radius:50%;background:var(--verde);box-shadow:0 0 8px var(--verde)}
+.conn.off i{background:var(--vermelho);box-shadow:0 0 8px var(--vermelho)}
+
+.panel{
+  background:var(--card);border:1px solid var(--border);border-radius:24px;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:0 20px 50px rgba(0,0,0,.35);
+}
+
+.status{padding:30px 22px 24px;text-align:center}
+.label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+.orb{
+  width:104px;height:104px;border-radius:50%;margin:20px auto 18px;position:relative;
+  background:radial-gradient(circle at 35% 30%, #fff8, var(--accent) 45%, color-mix(in srgb,var(--accent) 60%,#000) 100%);
+  box-shadow:0 0 0 8px color-mix(in srgb,var(--accent) 18%,transparent),0 0 60px color-mix(in srgb,var(--accent) 65%,transparent);
+  transition:all .5s;
+}
+.orb::after{
+  content:"";position:absolute;inset:-8px;border-radius:50%;
+  border:2px solid var(--accent);opacity:0;animation:ping 2s ease-out infinite;
+}
+body.idle .orb{animation:none;box-shadow:0 0 0 8px rgba(100,116,139,.15)}
+body.idle .orb::after{animation:none}
+@keyframes ping{0%{transform:scale(.9);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+#nome{font-size:28px;font-weight:800;letter-spacing:.3px;color:#fff;transition:opacity .2s}
+#desc{font-size:14px;color:var(--muted);margin-top:6px}
+
+.steps{display:flex;gap:6px;margin-top:22px}
+.step{flex:1;height:5px;border-radius:99px;background:rgba(255,255,255,.1);transition:background .4s,box-shadow .4s}
+.step.on{background:var(--c)}
+.step.now{box-shadow:0 0 10px var(--c)}
+
+h2{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:26px 6px 12px;font-weight:600}
+h2 b{color:var(--text);letter-spacing:.5px;text-transform:none;font-weight:700}
+
+.cars{display:grid;gap:10px}
+.car{
+  display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;cursor:pointer;
+  background:var(--card);border:1px solid var(--border);
+  transition:transform .12s,border-color .25s,background .25s,box-shadow .25s;
+}
+.car:active{transform:scale(.975)}
+.car .ico{
+  width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px;flex:none;
+  background:rgba(255,255,255,.07);border:1px solid var(--border);
+}
+.car .info{flex:1;min-width:0}
+.car .modelo{font-size:16px;font-weight:700}
+.car .meta{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.car .placa{
+  display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;
+  letter-spacing:1.5px;color:#0b1220;background:#f1f5f9;border-top:3px solid #2563eb;
+}
+.car .badge{
+  --c:#94a3b8;
+  font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;flex:none;
+  color:var(--c);
+  background:color-mix(in srgb,var(--c) 16%,transparent);
+  border:1px solid color-mix(in srgb,var(--c) 40%,transparent);
+}
+.car.sel{
+  border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  box-shadow:0 0 0 1px var(--accent) inset,0 8px 28px color-mix(in srgb,var(--accent) 24%,transparent);
+}
+
+.btns{display:grid;gap:10px}
+.btn{
+  --c:var(--azul);
+  display:flex;align-items:center;gap:14px;width:100%;
+  padding:14px 16px;border-radius:18px;cursor:pointer;text-align:left;
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:16px;font-weight:600;
+  transition:transform .12s,background .25s,border-color .25s,box-shadow .25s;
+}
+.btn:hover{background:rgba(255,255,255,.08)}
+.btn:active{transform:scale(.975)}
+.btn .dot{
+  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-size:20px;flex:none;
+  background:color-mix(in srgb,var(--c) 20%,transparent);
+  border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
+}
+.btn small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:2px}
+.btn .tick{margin-left:auto;opacity:0;font-size:18px;color:var(--c);transition:opacity .25s}
+.btn.active{
+  border-color:var(--c);
+  background:color-mix(in srgb,var(--c) 14%,transparent);
+  box-shadow:0 0 0 1px var(--c) inset,0 8px 28px color-mix(in srgb,var(--c) 28%,transparent);
+}
+.btn.active .tick{opacity:1}
+.btn.busy{opacity:.6;pointer-events:none}
+.btn.reset{--c:#94a3b8;padding:11px 16px;font-size:14px}
+.btn.reset .dot{width:34px;height:34px;font-size:16px;border-radius:11px}
+
+footer{text-align:center;font-size:11px;color:var(--muted);margin-top:22px;opacity:.7}
+</style>
+</head>
+
+<body class="idle">
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">🔧</div>
+      <div>
+        <h1>Sistema Oficina</h1>
+        <div class="sub">Painel de atendimento</div>
+      </div>
+    </div>
+    <div class="conn off" id="conn"><i></i><span>Conectando...</span></div>
+  </header>
+
+  <section class="panel status">
+    <div class="label" id="carroLabel">Status atual</div>
+    <div class="orb"></div>
+    <div id="nome">Na fila</div>
+    <div id="desc">Nenhum atendimento em andamento</div>
+    <div class="steps">
+      <div class="step" style="--c:var(--vermelho)"></div>
+      <div class="step" style="--c:var(--amarelo)"></div>
+      <div class="step" style="--c:var(--azul)"></div>
+      <div class="step" style="--c:var(--verde)"></div>
+    </div>
+  </section>
+
+  <h2>Veículos</h2>
+  <div class="cars" id="cars"></div>
+
+  <h2>Controle de <b id="ctrlNome">—</b></h2>
+
+  <div class="btns">
+    <button class="btn" style="--c:var(--vermelho)" data-c="1" onclick="enviar('1')">
+      <span class="dot">🔴</span>
+      <span>Cliente solicitado<small>Chama o cliente com alerta sonoro</small></span>
+      <span class="tick">✓</span>
+    </button>
+    <button class="btn" style="--c:var(--amarelo)" data-c="2" onclick="enviar('2')">
+      <span class="dot">🟡</span>
+      <span>Diagnóstico<small>Veículo em avaliação</small></span>
+      <span class="tick">✓</span>
+    </button>
+    <button class="btn" style="--c:var(--azul)" data-c="3" onclick="enviar('3')">
+      <span class="dot">🔵</span>
+      <span>Manutenção<small>Serviço em execução</small></span>
+      <span class="tick">✓</span>
+    </button>
+    <button class="btn" style="--c:var(--verde)" data-c="4" onclick="enviar('4')">
+      <span class="dot">🟢</span>
+      <span>Finalizado<small>Pronto para retirada</small></span>
+      <span class="tick">✓</span>
+    </button>
+    <button class="btn reset" data-c="0" onclick="enviar('0')">
+      <span class="dot">⏸️</span>
+      <span>Voltar para a fila</span>
+      <span class="tick">✓</span>
+    </button>
+  </div>
+
+  <footer>Atualização em tempo real</footer>
+</div>
+
+<script>
+// ===== MQTT (mesmos tópicos do ESP32) =====
+const BASE = "etec3a/oficina/k7x9q2";
+const TOPIC_CMD = BASE + "/cmd";
+const TOPIC_STATE = BASE + "/state";
+const TOPIC_STATUS = BASE + "/status";
+
+const CARROS = [
+  { ico:"🚗", modelo:"Honda Civic 2018", cliente:"João Silva",  servico:"Troca de óleo e freios", placa:"ABC1D23" },
+  { ico:"🛻", modelo:"Fiat Toro 2021",   cliente:"Maria Souza", servico:"Revisão dos 40 mil km",  placa:"QWE4R56" },
+  { ico:"🚙", modelo:"VW Gol 2015",      cliente:"Carlos Lima", servico:"Barulho na suspensão",   placa:"XYZ7K89" }
+];
+
+const NOMES = ["Na fila", "Cliente solicitado", "Diagnóstico", "Manutenção", "Finalizado"];
+const CORES = ["azul", "vermelho", "amarelo", "azul", "verde"];
+const DESC = {
+  0: "Nenhum atendimento em andamento",
+  1: "O cliente foi chamado ao balcão",
+  2: "Veículo em avaliação técnica",
+  3: "Serviço em execução na oficina",
+  4: "Serviço concluído, pronto para retirada"
+};
+
+let carroSel = 0;
+let ultima = { carros: CARROS.map(() => ({ estado:0, nome:NOMES[0], cor:CORES[0] })) };
+let sigCarros = "";
+let mqttOk = false, espOnline = false;
+
+function nomeDe(c){ return c.estado === 0 ? "Na fila" : c.nome; }
+function corDe(c){ return c.estado === 0 ? "#94a3b8" : "var(--" + c.cor + ")"; }
+
+function renderCarros(lista){
+  const sig = carroSel + "|" + lista.map(c => c.estado).join(",");
+  if (sig === sigCarros) return;
+  sigCarros = sig;
+  document.getElementById("cars").innerHTML = CARROS.map((c, i) => `
+    <div class="car ${i === carroSel ? "sel" : ""}" onclick="selecionarCarro(${i})">
+      <div class="ico">${c.ico}</div>
+      <div class="info">
+        <div class="modelo">${c.modelo}</div>
+        <div class="meta">${c.cliente} · ${c.servico}</div>
+        <span class="placa">${c.placa}</span>
+      </div>
+      <div class="badge" style="--c:${corDe(lista[i])}">${nomeDe(lista[i])}</div>
+    </div>`).join("");
+}
+
+function selecionarCarro(i){
+  carroSel = i;
+  aplicar(ultima);
+}
+
+function aplicar(data){
+  ultima = data;
+  const lista = data.carros;
+  const atual = lista[carroSel];
+  const e = atual.estado;
+
+  renderCarros(lista);
+
+  document.body.className = e === 0 ? "idle" : atual.cor;
+  document.getElementById("nome").innerText = nomeDe(atual);
+  document.getElementById("desc").innerText = DESC[e] || "";
+  document.getElementById("carroLabel").innerText = "Status · " + CARROS[carroSel].modelo;
+  document.getElementById("ctrlNome").innerText = CARROS[carroSel].modelo;
+
+  document.querySelectorAll(".step").forEach((s, i) => {
+    s.classList.toggle("on", e > 0 && i < e);
+    s.classList.toggle("now", i + 1 === e);
+  });
+  document.querySelectorAll(".btn").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.c) === e);
+  });
+}
+
+function atualizarConn(){
+  const c = document.getElementById("conn");
+  const ok = mqttOk && espOnline;
+  c.classList.toggle("off", !ok);
+  c.querySelector("span").innerText = !mqttOk ? "Sem conexão" : (!espOnline ? "Dispositivo offline" : "Online");
+}
+
+// ===== MQTT =====
+const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
+  clientId: "oficina-web-" + Math.random().toString(16).slice(2, 10),
+  reconnectPeriod: 3000
+});
+
+client.on("connect", () => {
+  mqttOk = true;
+  client.subscribe([TOPIC_STATE, TOPIC_STATUS]);
+  atualizarConn();
+});
+client.on("close", () => { mqttOk = false; atualizarConn(); });
+client.on("error", () => { mqttOk = false; atualizarConn(); });
+
+client.on("message", (topic, msg) => {
+  const txt = msg.toString();
+  if (topic === TOPIC_STATUS) {
+    espOnline = (txt === "online");
+    atualizarConn();
+  } else if (topic === TOPIC_STATE) {
+    try {
+      const d = JSON.parse(txt);
+      aplicar({ carros: d.estados.map(e => ({ estado:e, nome:NOMES[e], cor:CORES[e] })) });
+    } catch (err) {}
+  }
+});
+
+function enviar(cmd){
+  if (!mqttOk) return;
+  const btn = document.querySelector('.btn[data-c="' + cmd + '"]');
+  btn.classList.add("busy");
+  client.publish(TOPIC_CMD, carroSel + ":" + cmd);
+  setTimeout(() => btn.classList.remove("busy"), 500);
+}
+
+aplicar(ultima);
+</script>
+
+</body>
+</html>
